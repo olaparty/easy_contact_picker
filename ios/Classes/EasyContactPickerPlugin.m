@@ -16,27 +16,54 @@ NSString*const METHOD_CALL_LIST = @"selectContactList";
 
 @implementation EasyContactPickerPlugin{
   UIImagePickerController *_imagePickerController;
-  UIViewController *_viewController;
 }
 
 + (void)registerWithRegistrar:(NSObject<FlutterPluginRegistrar>*)registrar {
   FlutterMethodChannel* channel = [FlutterMethodChannel
       methodChannelWithName:CHANNEL
             binaryMessenger:[registrar messenger]];
-    
-  UIViewController *viewController =
-  [UIApplication sharedApplication].delegate.window.rootViewController;
-    
-  EasyContactPickerPlugin* instance = [[EasyContactPickerPlugin alloc] initWithViewController:viewController];
+
+  EasyContactPickerPlugin* instance = [[EasyContactPickerPlugin alloc] init];
   [registrar addMethodCallDelegate:instance channel:channel];
 }
 
-- (instancetype)initWithViewController:(UIViewController *)viewController {
-  self = [super init];
-  if (self) {
-      _viewController = viewController;
-  }
-  return self;
+- (UIWindow *)pt_activeKeyWindow {
+    if (@available(iOS 13.0, *)) {
+        UIWindow *keyWindow = nil;
+        UIWindow *fallback = nil;
+        for (UIScene *scene in [UIApplication sharedApplication].connectedScenes) {
+            if (![scene isKindOfClass:[UIWindowScene class]]) {
+                continue;
+            }
+            UIWindowScene *windowScene = (UIWindowScene *)scene;
+            for (UIWindow *window in windowScene.windows) {
+                if (fallback == nil) {
+                    fallback = window;
+                }
+                if (window.isKeyWindow) {
+                    keyWindow = window;
+                    if (scene.activationState == UISceneActivationStateForegroundActive) {
+                        return window;
+                    }
+                }
+            }
+        }
+        if (keyWindow) {
+            return keyWindow;
+        }
+        if (fallback) {
+            return fallback;
+        }
+    }
+    return [UIApplication sharedApplication].delegate.window;
+}
+
+- (UIViewController *)pt_topViewController {
+    UIViewController *viewController = [self pt_activeKeyWindow].rootViewController;
+    while (viewController.presentedViewController) {
+        viewController = viewController.presentedViewController;
+    }
+    return viewController;
 }
 
 - (void)handleMethodCall:(FlutterMethodCall*)call result:(FlutterResult)result {
@@ -64,20 +91,20 @@ NSString*const METHOD_CALL_LIST = @"selectContactList";
     CNContactPickerViewController *contactPicker = [[CNContactPickerViewController alloc] init];
     contactPicker.delegate = self;
     contactPicker.displayedPropertyKeys = @[CNContactPhoneNumbersKey];
-    [_viewController presentViewController:contactPicker animated:YES completion:nil];
+    [[self pt_topViewController] presentViewController:contactPicker animated:YES completion:nil];
 }
 
 ///  进入系统通讯录页面
 - (void)contactPicker:(CNContactPickerViewController *)picker didSelectContactProperty:(CNContactProperty *)contactProperty {
     CNPhoneNumber *phoneNumberModel = (CNPhoneNumber *)contactProperty.value;
-    
-    [_viewController dismissViewControllerAnimated:YES completion:^{
+
+    [picker.presentingViewController dismissViewControllerAnimated:YES completion:^{
         /// 联系人
         NSString *name = [NSString stringWithFormat:@"%@%@",contactProperty.contact.familyName, contactProperty.contact.givenName];
         /// 电话
         NSString *phoneNumber = phoneNumberModel.stringValue;
         phoneNumber = [phoneNumber stringByReplacingOccurrencesOfString:@"-" withString:@""];
-        
+
         NSMutableDictionary *dict = [NSMutableDictionary dictionary];
                     [dict setObject:name forKey:@"fullName"];
                     [dict setObject:phoneNumber forKey:@"phoneNumber"];
